@@ -1,146 +1,192 @@
-# احفظ الكود ده باسم app.py
 import streamlit as st
 import pandas as pd
 
 # ==========================================
-# 1. إعدادات الصفحة والتصميم
+# 1. إعدادات الصفحة
 # ==========================================
-st.set_page_config(page_title="Smart AbID System", layout="wide")
+st.set_page_config(page_title="Blood Bank Expert System", layout="wide", page_icon="🩸")
 
-st.title("🩸 Smart Antibody Identification System (AI-Assisted)")
-st.markdown("**Version 5.0 | Kidd/Duffy/MNS Dosage Sensitive Logic**")
+st.markdown("""
+<style>
+    .reportview-container { margin-top: -2em; }
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    .block-container {padding-top: 1rem;}
+</style>
+""", unsafe_allow_html=True)
+
+st.title("🩸 Smart Antibody Identification System")
+st.caption("AI Logic V7.0 | Kidd Dosage Support | Auto-Correction Grid")
 
 # ==========================================
-# 2. البيانات الأساسية (Logic Core)
+# 2. القواعد الثابتة
 # ==========================================
-antigens = ["D", "C", "c", "E", "e", "K", "k", "Fya", "Fyb", "Jka", "Jkb", "M", "N", "S", "s"]
+antigens_order = ["D", "C", "c", "E", "e", "K", "k", "Fya", "Fyb", "Jka", "Jkb", "M", "N", "S", "s"]
 allele_pairs = {'C':'c', 'c':'C', 'E':'e', 'e':'E', 'Fya':'Fyb', 'Fyb':'Fya', 
                 'Jka':'Jkb', 'Jkb':'Jka', 'M':'N', 'N':'M', 'S':'s', 's':'S', 'K':'k', 'k':'K'}
 
 def is_homozygous(ag, ph):
-    if ag == 'D': return True 
+    if ag == 'D': return True
     partner = allele_pairs.get(ag)
     if not partner: return True
-    return ph.get(ag) == 1 and ph.get(partner) == 0
+    # Antigen Present AND Partner Absent = Homozygous
+    return ph.get(ag, 0) == 1 and ph.get(partner, 0) == 0
 
 # ==========================================
-# 3. شاشة المدير (Admin Panel) - لتعديل اللوت
+# 3. إعدادات البانل (ADMIN MODE) - "السر هنا"
 # ==========================================
-with st.expander("🛠️ Admin Panel: Panel Configuration (اضغط هنا لتعديل الجدول)", expanded=True):
-    st.info("قم بمطابقة الجدول الأسفل مع الـ Master Sheet الموجود في المعمل.")
+with st.expander("🛠️ إعدادات البانل (Admin - Setup Panel Sheet)", expanded=True):
+    col_up, col_edit = st.columns([1, 2])
     
-    # مصفوفة لتخزين قيم الجدول (session state)
-    if 'panel_grid' not in st.session_state:
-        # القيمة الافتراضية (مثال Bio-Rad شائع)
-        default_grid = [
-             {"D":1,"C":1,"c":0,"E":0,"e":1,"K":0,"k":1,"Fya":1,"Fyb":1,"Jka":1,"Jkb":0,"M":1,"N":0,"S":0,"s":1}, # 1
-             {"D":1,"C":1,"c":0,"E":0,"e":1,"K":0,"k":1,"Fya":0,"Fyb":1,"Jka":1,"Jkb":0,"M":1,"N":0,"S":0,"s":1}, # 2
-             {"D":1,"C":0,"c":1,"E":1,"e":0,"K":0,"k":1,"Fya":1,"Fyb":0,"Jka":0,"Jkb":1,"M":0,"N":1,"S":0,"s":1}, # 3
-             {"D":0,"C":1,"c":1,"E":0,"e":1,"K":0,"k":1,"Fya":1,"Fyb":0,"Jka":1,"Jkb":1,"M":0,"N":1,"S":1,"s":1}, # 4
-             {"D":0,"C":0,"c":1,"E":1,"e":1,"K":0,"k":1,"Fya":0,"Fyb":1,"Jka":1,"Jkb":0,"M":0,"N":1,"S":1,"s":1}, # 5
-             {"D":0,"C":0,"c":1,"E":0,"e":1,"K":1,"k":1,"Fya":0,"Fyb":1,"Jka":0,"Jkb":1,"M":1,"N":1,"S":1,"s":0}, # 6
-             {"D":0,"C":0,"c":1,"E":0,"e":1,"K":0,"k":1,"Fya":0,"Fyb":1,"Jka":1,"Jkb":0,"M":0,"N":1,"S":0,"s":1}, # 7
-             {"D":1,"C":0,"c":1,"E":0,"e":1,"K":0,"k":1,"Fya":0,"Fyb":0,"Jka":1,"Jkb":0,"M":0,"N":1,"S":0,"s":1}, # 8
-             {"D":0,"C":0,"c":1,"E":0,"e":1,"K":0,"k":1,"Fya":0,"Fyb":1,"Jka":0,"Jkb":1,"M":0,"N":1,"S":0,"s":1}, # 9
-             {"D":0,"C":0,"c":1,"E":0,"e":1,"K":0,"k":1,"Fya":1,"Fyb":0,"Jka":1,"Jkb":0,"M":1,"N":0,"S":1,"s":1}, # 10 (Edited to fit User Data Example)
-             {"D":0,"C":0,"c":1,"E":0,"e":1,"K":0,"k":1,"Fya":1,"Fyb":0,"Jka":0,"Jkb":1,"M":0,"N":1,"S":0,"s":1}, # 11
-        ]
-        st.session_state.panel_grid = default_grid
+    # تهيئة الجدول الفاضي أول مرة
+    if 'editor_df' not in st.session_state:
+        # Initial dummy data
+        default_data = [{"Cell ID": f"Cell {i+1}", **{ag: 0 for ag in antigens_order}} for i in range(11)]
+        st.session_state.editor_df = pd.DataFrame(default_data)
 
-    # رسم الجدول التفاعلي (Data Editor)
-    # ده أسهل من الأزرار بكتير، جدول زي الاكسل تعدل فيه براحتك
-    df_panel = pd.DataFrame(st.session_state.panel_grid)
-    df_panel.index = [f"Cell {i+1}" for i in range(11)]
-    
-    edited_df = st.data_editor(df_panel, use_container_width=True, height=400)
-    
-    # تحديث الداتا بناء على تعديل المستخدم
-    panel_data_list = []
-    for idx, row in edited_df.iterrows():
-        panel_data_list.append({"id": idx, "ph": row.to_dict()})
+    with col_up:
+        st.info("طريقتين لإدخال الجدول (مرة كل شهر):")
+        st.write("1️⃣ ارفع ملف Excel (لو متوفر).")
+        st.write("2️⃣ أو عدل الجدول في الناحية الثانية يدوياً.")
+        uploaded_file = st.file_uploader("Upload Excel", type=["xlsx", "xls"])
+        
+        if uploaded_file:
+            try:
+                # محاولة قراءة الملف وتنظيفه
+                raw_df = pd.read_excel(uploaded_file)
+                # نحاول نلاقي العواميد المشتركة
+                clean_rows = []
+                for i in range(min(11, len(raw_df))):
+                    row_dict = {"Cell ID": f"Cell {i+1}"}
+                    for ag in antigens_order:
+                        # بنحاول ندور على العمود حتى لو اسمه فيه مسافات
+                        found = False
+                        for col in raw_df.columns:
+                            if str(col).strip() == ag:
+                                val = raw_df.iloc[i][col]
+                                row_dict[ag] = 1 if (val==1 or val=='+' or str(val).lower()=='pos') else 0
+                                found = True
+                                break
+                        if not found: row_dict[ag] = 0
+                    clean_rows.append(row_dict)
+                st.session_state.editor_df = pd.DataFrame(clean_rows)
+                st.success("تم استيراد الملف! راجع الجدول لتأكيد الدقة.")
+            except:
+                st.error("فشل قراءة الملف. تأكد من الصيغة.")
+
+    with col_edit:
+        st.write("### 📝 Panel Grid Editor (تعديل الجدول)")
+        st.caption("اضغط مرتين على أي خلية لتغيير قيمتها (1 = موجب / 0 = سالب).")
+        
+        # الجدول التفاعلي الرهيب
+        # num_rows="fixed" عشان المستخدم ميمسحش صفوف بالغلط
+        edited_panel = st.data_editor(
+            st.session_state.editor_df,
+            hide_index=True,
+            column_config={
+                "Cell ID": st.column_config.TextColumn(disabled=True),
+            },
+            height=38*12, # ارتفاع مناسب لـ 11 خلية
+            use_container_width=True
+        )
 
 # ==========================================
-# 4. شاشة المستخدم (إدخال النتائج)
+# 4. إدخال نتايج المريض
 # ==========================================
 st.divider()
-st.subheader("🧪 Patient Results Entry")
+st.subheader("🧪 إدخال نتائج المريض (Patient Reactions)")
 
-col1, col2 = st.columns([2, 1])
+c1, c2 = st.columns([3, 1])
 
-with col1:
-    user_reactions = {}
-    cols_input = st.columns(4) # 4 columns layout
+with c1:
+    user_inputs = {}
+    grid_cols = st.columns(6) # صفين للعرض الجيد
     for i in range(1, 12):
-        with cols_input[(i-1)%4]:
-            val_str = st.selectbox(f"Cell {i}", ["Neg", "w+", "1+", "2+", "3+", "4+"], key=f"r_{i}")
-            val = 0 if val_str == "Neg" else (0.5 if val_str == "w+" else int(val_str.replace("+", "")))
-            user_reactions[i] = val
+        with grid_cols[(i-1)%6]: # توزيع متناسق
+            val_s = st.selectbox(f"Cell {i}", ["Neg", "w+", "1+", "2+", "3+", "4+"], key=f"reac_{i}")
+            score = 0 if val_s == "Neg" else (0.5 if val_s == "w+" else int(val_s.replace("+", "")))
+            user_inputs[i] = score
 
-with col2:
-    st.write("### Control & Info")
-    ac_val = st.radio("Auto Control", ["Negative", "Positive"])
-    pt_id = st.text_input("Patient ID (Optional)")
-    btn_calc = st.button("🔍 Analyze Results", type="primary", use_container_width=True)
+with c2:
+    st.markdown("<br>", unsafe_allow_html=True)
+    ac = st.radio("Auto Control", ["Negative", "Positive"])
+    p_name = st.text_input("رقم الملف / المريض", placeholder="اختياري")
+    run_btn = st.button("تشخيص الحالة 🩺", type="primary", use_container_width=True)
 
 # ==========================================
-# 5. محرك التحليل (The Engine)
+# 5. ANALYSIS ENGINE V7 (FINAL)
 # ==========================================
-if btn_calc:
-    st.divider()
-    st.subheader("📊 Analysis Report")
+if run_btn:
+    st.markdown("---")
     
-    if ac_val == "Positive":
-        st.error("🛑 CRITICAL: Auto Control is POSITIVE. Direct Antiglobulin Test (DAT) Required. Logic Suspended.")
+    # 1. Prepare Panel Data form the Edited Grid
+    panel_final = []
+    for idx, row in edited_panel.iterrows():
+        # Clean row data
+        phenotype = {k: int(v) for k, v in row.items() if k in antigens_order}
+        panel_final.append({"id": idx+1, "ph": phenotype})
+    
+    # 2. Safety Checks
+    if ac == "Positive":
+        st.error("⚠️ **Auto Control Positive:** Alloantibody identification logic is suspended. Suggest Auto-Antibody workup (DAT).")
     else:
-        # Phase 1: Exclusion
-        neg_cells = [cid for cid, v in user_reactions.items() if v == 0]
-        pos_cells = [cid for cid, v in user_reactions.items() if v > 0]
+        # A) EXCLUSION
+        neg_cells = [k for k,v in user_inputs.items() if v == 0]
+        pos_cells = [k for k,v in user_inputs.items() if v > 0]
         
         ruled_out = set()
-        debug_info = [] # عشان نشوف البرنامج فكر ازاي
+        debug_log = []
 
-        for ag in antigens:
-            for cid in neg_cells:
-                # Get phenotype from Edited Table
-                cell_ph = panel_data_list[int(cid)-1]['ph'] # cid-1 because list index starts at 0
+        for ag in antigens_order:
+            for n_id in neg_cells:
+                # Safe access (handle index)
+                cell = panel_final[n_id-1]['ph']
                 
-                if cell_ph.get(ag) == 1:
-                    if is_homozygous(ag, cell_ph):
+                if cell.get(ag) == 1:
+                    # Homozygous Rule Check
+                    if is_homozygous(ag, cell):
                         ruled_out.add(ag)
-                        debug_info.append(f"Excluded {ag} on Homozygous Cell {cid}")
-                        break
+                        debug_log.append(f"Excluded {ag} (Homozygous on Cell {n_id})")
+                        break # Ruled out
+                    # else: Skipped due to Heterozygous Dosage
         
-        candidates = [ag for ag in antigens if ag not in ruled_out]
+        candidates = [ag for ag in antigens_order if ag not in ruled_out]
         
-        # Phase 2: Inclusion Pattern
-        confirmed_matches = []
-        notes = []
-
-        if len(candidates) == 0:
-             st.warning("⚪ Result: Pan-Negative or Antibody to Low Frequency Antigen.")
+        # B) INCLUSION
+        matches = []
+        flags = []
+        
+        if not candidates:
+             st.warning("⚪ **Inconclusive:** No common alloantibodies found. Consider Low-Frequency Antigens.")
         else:
-             for cand in candidates:
-                 # Check Matches
-                 missed_positives = []
-                 for pid in pos_cells:
-                     cell_ph = panel_data_list[int(pid)-1]['ph']
-                     if cell_ph.get(cand) == 0:
-                         missed_positives.append(pid)
-                 
-                 if not missed_positives:
-                     confirmed_matches.append(cand)
-                 else:
-                     notes.append(f"Anti-{cand} is unlikely (Patient reacted to Cell {missed_positives} which lacks {cand}).")
-
-             if confirmed_matches:
-                 st.success(f"✅ Likely Antibody Identified: {', '.join(['Anti-'+c for c in confirmed_matches])}")
-                 if len(confirmed_matches) > 1:
-                     st.info("⚠️ Multiple candidates found. Compare pattern phases or use selected cells.")
-                 
-                 st.markdown("---")
-                 st.write("**Rule-out Logic Log:**")
-                 st.json(list(ruled_out))
-             else:
-                 st.error("❌ Inconclusive. Candidates exist but do not fit the reaction pattern.")
-                 st.write("Candidates that passed exclusion but failed pattern match:", candidates)
-                 for n in notes: st.write("- " + n)
+            for cand in candidates:
+                # Check 1: Does it match Positive Pattern?
+                missed = []
+                for p_id in pos_cells:
+                    cell = panel_final[p_id-1]['ph']
+                    if cell.get(cand, 0) == 0:
+                        missed.append(p_id)
+                
+                if not missed:
+                    matches.append(cand)
+                else:
+                    flags.append(f"Anti-{cand} is unlikely (Reacted to Cell {missed} which is Antigen Negative).")
+            
+            # C) DISPLAY RESULTS
+            c_res1, c_res2 = st.columns([2, 1])
+            with c_res1:
+                if matches:
+                    st.success(f"✅ **Identified Antibody:**  {'  +  '.join(['Anti-'+m for m in matches])}")
+                    st.info("📋 **Next Steps:**\n- Verify patient phenotype (must be negative).\n- Confirm with 3+ cells and 3- cells.")
+                    
+                    if len(matches) > 1:
+                        st.warning("⚠️ Multiple candidates detected. Use selected cells or enzyme panel to separate.")
+                else:
+                    st.error("❌ **Result:** Inconclusive Pattern (Candidates exist but don't fit Inclusion Logic).")
+            
+            with c_res2:
+                with st.expander("Show Logic Trace"):
+                    st.write("Candidates survived:", candidates)
+                    if flags: st.write("Mismatch Warnings:", flags)
+                    st.write("Exclusion Log:", debug_log)
