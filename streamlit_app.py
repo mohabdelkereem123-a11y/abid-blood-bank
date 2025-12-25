@@ -1,151 +1,146 @@
+# احفظ الكود ده باسم app.py
 import streamlit as st
 import pandas as pd
-import math
-from pathlib import Path
 
-# Set the title and favicon that appear in the Browser's tab bar.
-st.set_page_config(
-    page_title='GDP dashboard',
-    page_icon=':earth_americas:', # This is an emoji shortcode. Could be a URL too.
-)
+# ==========================================
+# 1. إعدادات الصفحة والتصميم
+# ==========================================
+st.set_page_config(page_title="Smart AbID System", layout="wide")
 
-# -----------------------------------------------------------------------------
-# Declare some useful functions.
+st.title("🩸 Smart Antibody Identification System (AI-Assisted)")
+st.markdown("**Version 5.0 | Kidd/Duffy/MNS Dosage Sensitive Logic**")
 
-@st.cache_data
-def get_gdp_data():
-    """Grab GDP data from a CSV file.
+# ==========================================
+# 2. البيانات الأساسية (Logic Core)
+# ==========================================
+antigens = ["D", "C", "c", "E", "e", "K", "k", "Fya", "Fyb", "Jka", "Jkb", "M", "N", "S", "s"]
+allele_pairs = {'C':'c', 'c':'C', 'E':'e', 'e':'E', 'Fya':'Fyb', 'Fyb':'Fya', 
+                'Jka':'Jkb', 'Jkb':'Jka', 'M':'N', 'N':'M', 'S':'s', 's':'S', 'K':'k', 'k':'K'}
 
-    This uses caching to avoid having to read the file every time. If we were
-    reading from an HTTP endpoint instead of a file, it's a good idea to set
-    a maximum age to the cache with the TTL argument: @st.cache_data(ttl='1d')
-    """
+def is_homozygous(ag, ph):
+    if ag == 'D': return True 
+    partner = allele_pairs.get(ag)
+    if not partner: return True
+    return ph.get(ag) == 1 and ph.get(partner) == 0
 
-    # Instead of a CSV on disk, you could read from an HTTP endpoint here too.
-    DATA_FILENAME = Path(__file__).parent/'data/gdp_data.csv'
-    raw_gdp_df = pd.read_csv(DATA_FILENAME)
+# ==========================================
+# 3. شاشة المدير (Admin Panel) - لتعديل اللوت
+# ==========================================
+with st.expander("🛠️ Admin Panel: Panel Configuration (اضغط هنا لتعديل الجدول)", expanded=True):
+    st.info("قم بمطابقة الجدول الأسفل مع الـ Master Sheet الموجود في المعمل.")
+    
+    # مصفوفة لتخزين قيم الجدول (session state)
+    if 'panel_grid' not in st.session_state:
+        # القيمة الافتراضية (مثال Bio-Rad شائع)
+        default_grid = [
+             {"D":1,"C":1,"c":0,"E":0,"e":1,"K":0,"k":1,"Fya":1,"Fyb":1,"Jka":1,"Jkb":0,"M":1,"N":0,"S":0,"s":1}, # 1
+             {"D":1,"C":1,"c":0,"E":0,"e":1,"K":0,"k":1,"Fya":0,"Fyb":1,"Jka":1,"Jkb":0,"M":1,"N":0,"S":0,"s":1}, # 2
+             {"D":1,"C":0,"c":1,"E":1,"e":0,"K":0,"k":1,"Fya":1,"Fyb":0,"Jka":0,"Jkb":1,"M":0,"N":1,"S":0,"s":1}, # 3
+             {"D":0,"C":1,"c":1,"E":0,"e":1,"K":0,"k":1,"Fya":1,"Fyb":0,"Jka":1,"Jkb":1,"M":0,"N":1,"S":1,"s":1}, # 4
+             {"D":0,"C":0,"c":1,"E":1,"e":1,"K":0,"k":1,"Fya":0,"Fyb":1,"Jka":1,"Jkb":0,"M":0,"N":1,"S":1,"s":1}, # 5
+             {"D":0,"C":0,"c":1,"E":0,"e":1,"K":1,"k":1,"Fya":0,"Fyb":1,"Jka":0,"Jkb":1,"M":1,"N":1,"S":1,"s":0}, # 6
+             {"D":0,"C":0,"c":1,"E":0,"e":1,"K":0,"k":1,"Fya":0,"Fyb":1,"Jka":1,"Jkb":0,"M":0,"N":1,"S":0,"s":1}, # 7
+             {"D":1,"C":0,"c":1,"E":0,"e":1,"K":0,"k":1,"Fya":0,"Fyb":0,"Jka":1,"Jkb":0,"M":0,"N":1,"S":0,"s":1}, # 8
+             {"D":0,"C":0,"c":1,"E":0,"e":1,"K":0,"k":1,"Fya":0,"Fyb":1,"Jka":0,"Jkb":1,"M":0,"N":1,"S":0,"s":1}, # 9
+             {"D":0,"C":0,"c":1,"E":0,"e":1,"K":0,"k":1,"Fya":1,"Fyb":0,"Jka":1,"Jkb":0,"M":1,"N":0,"S":1,"s":1}, # 10 (Edited to fit User Data Example)
+             {"D":0,"C":0,"c":1,"E":0,"e":1,"K":0,"k":1,"Fya":1,"Fyb":0,"Jka":0,"Jkb":1,"M":0,"N":1,"S":0,"s":1}, # 11
+        ]
+        st.session_state.panel_grid = default_grid
 
-    MIN_YEAR = 1960
-    MAX_YEAR = 2022
+    # رسم الجدول التفاعلي (Data Editor)
+    # ده أسهل من الأزرار بكتير، جدول زي الاكسل تعدل فيه براحتك
+    df_panel = pd.DataFrame(st.session_state.panel_grid)
+    df_panel.index = [f"Cell {i+1}" for i in range(11)]
+    
+    edited_df = st.data_editor(df_panel, use_container_width=True, height=400)
+    
+    # تحديث الداتا بناء على تعديل المستخدم
+    panel_data_list = []
+    for idx, row in edited_df.iterrows():
+        panel_data_list.append({"id": idx, "ph": row.to_dict()})
 
-    # The data above has columns like:
-    # - Country Name
-    # - Country Code
-    # - [Stuff I don't care about]
-    # - GDP for 1960
-    # - GDP for 1961
-    # - GDP for 1962
-    # - ...
-    # - GDP for 2022
-    #
-    # ...but I want this instead:
-    # - Country Name
-    # - Country Code
-    # - Year
-    # - GDP
-    #
-    # So let's pivot all those year-columns into two: Year and GDP
-    gdp_df = raw_gdp_df.melt(
-        ['Country Code'],
-        [str(x) for x in range(MIN_YEAR, MAX_YEAR + 1)],
-        'Year',
-        'GDP',
-    )
+# ==========================================
+# 4. شاشة المستخدم (إدخال النتائج)
+# ==========================================
+st.divider()
+st.subheader("🧪 Patient Results Entry")
 
-    # Convert years from string to integers
-    gdp_df['Year'] = pd.to_numeric(gdp_df['Year'])
+col1, col2 = st.columns([2, 1])
 
-    return gdp_df
+with col1:
+    user_reactions = {}
+    cols_input = st.columns(4) # 4 columns layout
+    for i in range(1, 12):
+        with cols_input[(i-1)%4]:
+            val_str = st.selectbox(f"Cell {i}", ["Neg", "w+", "1+", "2+", "3+", "4+"], key=f"r_{i}")
+            val = 0 if val_str == "Neg" else (0.5 if val_str == "w+" else int(val_str.replace("+", "")))
+            user_reactions[i] = val
 
-gdp_df = get_gdp_data()
+with col2:
+    st.write("### Control & Info")
+    ac_val = st.radio("Auto Control", ["Negative", "Positive"])
+    pt_id = st.text_input("Patient ID (Optional)")
+    btn_calc = st.button("🔍 Analyze Results", type="primary", use_container_width=True)
 
-# -----------------------------------------------------------------------------
-# Draw the actual page
+# ==========================================
+# 5. محرك التحليل (The Engine)
+# ==========================================
+if btn_calc:
+    st.divider()
+    st.subheader("📊 Analysis Report")
+    
+    if ac_val == "Positive":
+        st.error("🛑 CRITICAL: Auto Control is POSITIVE. Direct Antiglobulin Test (DAT) Required. Logic Suspended.")
+    else:
+        # Phase 1: Exclusion
+        neg_cells = [cid for cid, v in user_reactions.items() if v == 0]
+        pos_cells = [cid for cid, v in user_reactions.items() if v > 0]
+        
+        ruled_out = set()
+        debug_info = [] # عشان نشوف البرنامج فكر ازاي
 
-# Set the title that appears at the top of the page.
-'''
-# :earth_americas: GDP dashboard
+        for ag in antigens:
+            for cid in neg_cells:
+                # Get phenotype from Edited Table
+                cell_ph = panel_data_list[int(cid)-1]['ph'] # cid-1 because list index starts at 0
+                
+                if cell_ph.get(ag) == 1:
+                    if is_homozygous(ag, cell_ph):
+                        ruled_out.add(ag)
+                        debug_info.append(f"Excluded {ag} on Homozygous Cell {cid}")
+                        break
+        
+        candidates = [ag for ag in antigens if ag not in ruled_out]
+        
+        # Phase 2: Inclusion Pattern
+        confirmed_matches = []
+        notes = []
 
-Browse GDP data from the [World Bank Open Data](https://data.worldbank.org/) website. As you'll
-notice, the data only goes to 2022 right now, and datapoints for certain years are often missing.
-But it's otherwise a great (and did I mention _free_?) source of data.
-'''
-
-# Add some spacing
-''
-''
-
-min_value = gdp_df['Year'].min()
-max_value = gdp_df['Year'].max()
-
-from_year, to_year = st.slider(
-    'Which years are you interested in?',
-    min_value=min_value,
-    max_value=max_value,
-    value=[min_value, max_value])
-
-countries = gdp_df['Country Code'].unique()
-
-if not len(countries):
-    st.warning("Select at least one country")
-
-selected_countries = st.multiselect(
-    'Which countries would you like to view?',
-    countries,
-    ['DEU', 'FRA', 'GBR', 'BRA', 'MEX', 'JPN'])
-
-''
-''
-''
-
-# Filter the data
-filtered_gdp_df = gdp_df[
-    (gdp_df['Country Code'].isin(selected_countries))
-    & (gdp_df['Year'] <= to_year)
-    & (from_year <= gdp_df['Year'])
-]
-
-st.header('GDP over time', divider='gray')
-
-''
-
-st.line_chart(
-    filtered_gdp_df,
-    x='Year',
-    y='GDP',
-    color='Country Code',
-)
-
-''
-''
-
-
-first_year = gdp_df[gdp_df['Year'] == from_year]
-last_year = gdp_df[gdp_df['Year'] == to_year]
-
-st.header(f'GDP in {to_year}', divider='gray')
-
-''
-
-cols = st.columns(4)
-
-for i, country in enumerate(selected_countries):
-    col = cols[i % len(cols)]
-
-    with col:
-        first_gdp = first_year[first_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-        last_gdp = last_year[last_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-
-        if math.isnan(first_gdp):
-            growth = 'n/a'
-            delta_color = 'off'
+        if len(candidates) == 0:
+             st.warning("⚪ Result: Pan-Negative or Antibody to Low Frequency Antigen.")
         else:
-            growth = f'{last_gdp / first_gdp:,.2f}x'
-            delta_color = 'normal'
+             for cand in candidates:
+                 # Check Matches
+                 missed_positives = []
+                 for pid in pos_cells:
+                     cell_ph = panel_data_list[int(pid)-1]['ph']
+                     if cell_ph.get(cand) == 0:
+                         missed_positives.append(pid)
+                 
+                 if not missed_positives:
+                     confirmed_matches.append(cand)
+                 else:
+                     notes.append(f"Anti-{cand} is unlikely (Patient reacted to Cell {missed_positives} which lacks {cand}).")
 
-        st.metric(
-            label=f'{country} GDP',
-            value=f'{last_gdp:,.0f}B',
-            delta=growth,
-            delta_color=delta_color
-        )
+             if confirmed_matches:
+                 st.success(f"✅ Likely Antibody Identified: {', '.join(['Anti-'+c for c in confirmed_matches])}")
+                 if len(confirmed_matches) > 1:
+                     st.info("⚠️ Multiple candidates found. Compare pattern phases or use selected cells.")
+                 
+                 st.markdown("---")
+                 st.write("**Rule-out Logic Log:**")
+                 st.json(list(ruled_out))
+             else:
+                 st.error("❌ Inconclusive. Candidates exist but do not fit the reaction pattern.")
+                 st.write("Candidates that passed exclusion but failed pattern match:", candidates)
+                 for n in notes: st.write("- " + n)
